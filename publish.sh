@@ -1,11 +1,25 @@
 #!/bin/bash
-# Usage: ./publish.sh "short description of what you wrote"
+# Usage: ./publish.sh "short note about what you wrote"
 set -e
 
 if [ -z "$1" ]; then
-  echo "Give it a short note about the entry, like:"
-  echo '  ./publish.sh "wrote about the market in Hoi An"'
+  echo 'Give it a short note, like: ./publish.sh "wrote about the market in Hoi An"'
   exit 1
+fi
+
+DATE=$(date +%Y-%m-%d)
+ENTRY="entries/$DATE.md"
+
+# Attach any new photo to today's entry, if today's entry exists.
+if [ -f "$ENTRY" ]; then
+  shopt -s nullglob
+  for img in images/*; do
+    fname=$(basename "$img")
+    if ! grep -qr "$fname" entries/; then
+      printf '\n![](images/%s)\n' "$fname" >> "$ENTRY"
+      echo "Attached photo to today's entry: $fname"
+    fi
+  done
 fi
 
 echo "Building site..."
