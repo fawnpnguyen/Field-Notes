@@ -1,33 +1,21 @@
 #!/bin/bash
-# Usage: ./publish.sh "short note about what you wrote"
+# publish.sh — Field Notes one-command publish
+# Run from inside the Journal folder: ./publish.sh
 set -e
 
-if [ -z "$1" ]; then
-  echo 'Give it a short note, like: ./publish.sh "wrote about the market in Hoi An"'
-  exit 1
-fi
+cd "$(dirname "$0")"
 
-DATE=$(date +%Y-%m-%d)
-ENTRY="entries/$DATE.md"
+echo "Sorting any loose photos into dated folders..."
+python3 sort_images.py
 
-# Attach any new photo to today's entry, if today's entry exists.
-if [ -f "$ENTRY" ]; then
-  shopt -s nullglob
-  for img in images/*; do
-    fname=$(basename "$img")
-    if ! grep -qr "$fname" entries/; then
-      printf '\n![](images/%s)\n' "$fname" >> "$ENTRY"
-      echo "Attached photo to today's entry: $fname"
-    fi
-  done
-fi
-
-echo "Building site..."
+echo "Building journal..."
 python3 build_journal.py
 
-echo "Saving to git..."
-git add .
-git commit -m "$1"
+echo "Committing..."
+git add -A
+git commit -m "Update: $(date '+%Y-%m-%d %H:%M')" || echo "Nothing new to commit, skipping."
+
+echo "Pushing..."
 git push
 
-echo "Done — entry built and pushed."
+echo "Done. Site is updating."
