@@ -1,8 +1,5 @@
 #!/bin/bash
-# publish.sh — Field Notes one-command publish
-# Run from inside the Journal folder: ./publish.sh
 set -e
-
 cd "$(dirname "$0")"
 
 echo "Sorting any loose photos into dated folders..."
@@ -10,6 +7,10 @@ python3 sort_images.py
 
 echo "Building journal..."
 python3 build_journal.py
+
+echo "Copying build to docs/ for GitHub Pages..."
+rm -rf docs
+cp -r site docs
 
 echo "Committing..."
 git add -A
