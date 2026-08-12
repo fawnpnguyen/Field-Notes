@@ -1,5 +1,8 @@
 #!/bin/bash
+# publish.sh — Field Notes one-command publish
+# Run from inside the Journal folder: ./publish.sh
 set -e
+
 cd "$(dirname "$0")"
 
 echo "Sorting any loose photos into dated folders..."

@@ -78,7 +78,8 @@ def build():
         elif date is None:
             date = datetime.strptime(f.stem, "%Y-%m-%d").date()
         slug = f.stem
-        html_body = markdown.markdown(post.content, extensions=["extra"])
+        fixed_content = post.content.replace("../images/", "images/")
+        html_body = markdown.markdown(fixed_content, extensions=["extra"])
         tags = post.get("tags", [])
         title = post.get("title") or date.strftime("%B %-d, %Y")
         entries.append({
