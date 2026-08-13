@@ -8,8 +8,12 @@ the photos' Markdown image lines to the bottom of it.
 
 Date detection, in order of preference:
   1. EXIF DateTimeOriginal / DateTimeDigitized / DateTime
-  2. File creation date (birthtime)
-  3. File modified date — last resort, least reliable
+  2. macOS Spotlight metadata (kMDItemContentCreationDate) — often
+     survives even when an app (messaging, export, re-save) strips EXIF,
+     because Photos/AirDrop can carry the original capture date here
+     separately from EXIF.
+  3. File creation date (birthtime)
+  4. File modified date — last resort, least reliable
 
 Prints which method was used for each photo so misdates are easy to
 spot before they go live.
@@ -19,6 +23,7 @@ Run standalone, or let publish.sh call it automatically.
 
 import os
 import shutil
+import subprocess
 from datetime import datetime
 from collections import defaultdict
 
@@ -38,7 +43,7 @@ CONVERT_TO_JPEG = (".heic", ".heif")
 EXIF_DATE_TAGS = ["DateTimeOriginal", "DateTimeDigitized", "DateTime"]
 
 
-def get_date_taken(path):
+def get_date_from_exif(path):
     try:
         from PIL import Image
         from PIL.ExifTags import TAGS
@@ -51,11 +56,42 @@ def get_date_taken(path):
                 if tag_name in tagged:
                     try:
                         dt = datetime.strptime(tagged[tag_name], "%Y:%m:%d %H:%M:%S")
-                        return dt.strftime("%Y-%m-%d"), "EXIF"
+                        return dt.strftime("%Y-%m-%d")
                     except (ValueError, TypeError):
                         continue
     except Exception:
         pass
+    return None
+
+
+def get_date_from_spotlight(path):
+    """Checks macOS Spotlight metadata for a capture date. This often
+    survives even when EXIF has been stripped (e.g. photos that came
+    through a messaging app before landing on disk), because Photos/
+    AirDrop can tag files with this separately from EXIF."""
+    try:
+        result = subprocess.run(
+            ["mdls", "-name", "kMDItemContentCreationDate", "-raw", path],
+            capture_output=True, text=True, timeout=5
+        )
+        raw = result.stdout.strip()
+        if raw and raw != "(null)":
+            # Typical format: 2026-08-12 14:23:01 +0000
+            dt = datetime.strptime(raw[:19], "%Y-%m-%d %H:%M:%S")
+            return dt.strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    return None
+
+
+def get_date_taken(path):
+    date_str = get_date_from_exif(path)
+    if date_str:
+        return date_str, "EXIF"
+
+    date_str = get_date_from_spotlight(path)
+    if date_str:
+        return date_str, "macOS metadata (no EXIF)"
 
     try:
         birthtime = os.stat(path).st_birthtime
@@ -122,6 +158,14 @@ def main():
         if ext not in VALID_EXT:
             continue
 
+        # Check dates BEFORE conversion when possible — Spotlight metadata
+        # on the original HEIC can be more reliable than on a freshly
+        # written JPEG, and this keeps date detection independent of
+        # the conversion step entirely.
+        pre_convert_date, pre_convert_method = None, None
+        if ext in CONVERT_TO_JPEG:
+            pre_convert_date, pre_convert_method = get_date_taken(fpath)
+
         # Convert HEIC/HEIF to JPEG first, in place, before date-checking/moving
         if ext in CONVERT_TO_JPEG:
             if not HEIF_SUPPORT:
@@ -131,7 +175,17 @@ def main():
             fpath = convert_heic_to_jpeg(fpath)
             fname = os.path.basename(fpath)
 
-        date_str, method = get_date_taken(fpath)
+        if pre_convert_date and "EXIF" in pre_convert_method:
+            # Trust the pre-conversion EXIF read; re-check post-conversion
+            # only as a fallback if it somehow didn't carry over.
+            post_date, post_method = get_date_taken(fpath)
+            if "EXIF" in post_method:
+                date_str, method = post_date, post_method
+            else:
+                date_str, method = pre_convert_date, pre_convert_method
+        else:
+            date_str, method = get_date_taken(fpath)
+
         dest_dir = os.path.join(IMAGES_DIR, date_str)
         os.makedirs(dest_dir, exist_ok=True)
 
@@ -152,7 +206,7 @@ def main():
     for date_str, final_name, method in moved:
         markdown = f"![](../images/{date_str}/{final_name})"
         by_date[date_str].append(markdown)
-        flag = "  <-- check this one" if "EXIF" not in method else ""
+        flag = "  <-- check this one" if "EXIF" not in method and "macOS metadata" not in method else ""
         print(f"  images/{date_str}/{final_name}   [{method}]{flag}")
 
     for date_str, lines in by_date.items():
