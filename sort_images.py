@@ -92,14 +92,18 @@ def append_to_entry(date_str, markdown_lines):
 
 
 def convert_heic_to_jpeg(src_path):
-    """Convert a HEIC/HEIF file to JPEG, return the new path. Deletes the original."""
+    """Converts HEIC/HEIF to JPEG, preserving EXIF. Deletes the original."""
     from PIL import Image
     img = Image.open(src_path)
+    exif_bytes = img.info.get("exif")
     if img.mode != "RGB":
         img = img.convert("RGB")
     base, _ = os.path.splitext(src_path)
     new_path = base + ".jpeg"
-    img.save(new_path, "JPEG", quality=92)
+    if exif_bytes:
+        img.save(new_path, "JPEG", quality=92, exif=exif_bytes)
+    else:
+        img.save(new_path, "JPEG", quality=92)
     os.remove(src_path)
     return new_path
 
