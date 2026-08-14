@@ -81,7 +81,7 @@ def build():
         fixed_content = post.content.replace("../images/", "images/")
         html_body = markdown.markdown(fixed_content, extensions=["extra"])
         tags = post.get("tags", [])
-        title = post.get("title") or date.strftime("%B %-d, %Y")
+        title = (post.get("title") or "").strip() or date.strftime("%B %-d, %Y")
         entries.append({
             "slug": slug,
             "title": title,
