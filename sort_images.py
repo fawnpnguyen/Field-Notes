@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-sort_images.py — Move any loose photos sitting directly in images/
-into images/YYYY-MM-DD/ (using the date the photo was actually taken),
-converting HEIC/HEIF to JPEG along the way (most browsers can't display
-HEIC), create that day's entry file if it doesn't exist yet, and append
-the photos' Markdown image lines to the bottom of it.
+sort_images.py — Move any loose photos and short video clips sitting
+directly in images/ into images/YYYY-MM-DD/ (using the date the file was
+actually taken), converting HEIC/HEIF to JPEG along the way (most
+browsers can't display HEIC), create that day's entry file if it
+doesn't exist yet, and append Markdown image lines (photos) or HTML
+<video> tags (clips) to the bottom of it.
 
 Date detection, in order of preference:
-  1. EXIF DateTimeOriginal / DateTimeDigitized / DateTime
+  1. EXIF DateTimeOriginal / DateTimeDigitized / DateTime (photos only —
+     video files don't carry this, so they skip straight to step 2)
   2. macOS Spotlight metadata (kMDItemContentCreationDate) — often
      survives even when an app (messaging, export, re-save) strips EXIF,
      because Photos/AirDrop can carry the original capture date here
-     separately from EXIF.
+     separately from EXIF. This is the primary method for videos.
   3. File creation date (birthtime)
   4. File modified date — last resort, least reliable
 
@@ -37,7 +39,9 @@ except ImportError:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGES_DIR = os.path.join(BASE_DIR, "images")
 ENTRIES_DIR = os.path.join(BASE_DIR, "entries")
-VALID_EXT = (".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp")
+IMAGE_EXT = (".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp")
+VIDEO_EXT = (".mp4", ".mov", ".m4v")
+VALID_EXT = IMAGE_EXT + VIDEO_EXT
 CONVERT_TO_JPEG = (".heic", ".heif")
 
 EXIF_DATE_TAGS = ["DateTimeOriginal", "DateTimeDigitized", "DateTime"]
@@ -162,6 +166,8 @@ def main():
         # on the original HEIC can be more reliable than on a freshly
         # written JPEG, and this keeps date detection independent of
         # the conversion step entirely.
+        is_video = ext in VIDEO_EXT
+
         pre_convert_date, pre_convert_method = None, None
         if ext in CONVERT_TO_JPEG:
             pre_convert_date, pre_convert_method = get_date_taken(fpath)
@@ -195,7 +201,7 @@ def main():
             dest_path = os.path.join(dest_dir, f"{base}_{int(datetime.now().timestamp())}{ext2}")
 
         shutil.move(fpath, dest_path)
-        moved.append((date_str, os.path.basename(dest_path), method))
+        moved.append((date_str, os.path.basename(dest_path), method, is_video))
 
     if not moved:
         print("No loose images to sort.")
@@ -203,11 +209,16 @@ def main():
 
     print("Sorted images:")
     by_date = defaultdict(list)
-    for date_str, final_name, method in moved:
-        markdown = f"![](../images/{date_str}/{final_name})"
-        by_date[date_str].append(markdown)
+    for date_str, final_name, method, is_video in moved:
+        if is_video:
+            line = (f'<video controls src="../images/{date_str}/{final_name}">'
+                    f'</video>')
+        else:
+            line = f"![](../images/{date_str}/{final_name})"
+        by_date[date_str].append(line)
         flag = "  <-- check this one" if "EXIF" not in method and "macOS metadata" not in method else ""
-        print(f"  images/{date_str}/{final_name}   [{method}]{flag}")
+        kind = "video" if is_video else "image"
+        print(f"  images/{date_str}/{final_name}   [{kind}, {method}]{flag}")
 
     for date_str, lines in by_date.items():
         append_to_entry(date_str, lines)
