@@ -132,7 +132,8 @@ h1{
 
 .prose{ font-size: 1.05rem; line-height: 1.75; color: var(--ink); }
 .prose p{ margin: 0 0 1.1em; }
-.prose img{
+.prose img,
+.prose video{
   width: 100%;
   border: 1px solid var(--rule);
   margin: 8px 0 4px;
